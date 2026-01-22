@@ -17,9 +17,19 @@ function parseMoney(v: string) {
   return Number.isFinite(n) ? n : NaN;
 }
 
-function formatPct(n: number) {
+function clampNonNegative(n: number) {
+  if (!Number.isFinite(n)) return n;
+  return Math.max(0, n);
+}
+
+function formatPct2(n: number) {
   if (!Number.isFinite(n)) return "—";
   return `${n.toFixed(2)}%`;
+}
+
+function formatPct0(n: number) {
+  if (!Number.isFinite(n)) return "—";
+  return `${Math.round(n)}%`;
 }
 
 function formatMoney(n: number) {
@@ -32,69 +42,103 @@ function formatMoney(n: number) {
   });
 }
 
+function formatMoney0(n: number) {
+  if (!Number.isFinite(n)) return "—";
+  // No cents — keep it clean
+  return Math.round(n).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+}
+
 export default function Home() {
-  const [adSpend, setAdSpend] = useState("");
-  const [adSales, setAdSales] = useState("");
-  const [totalSales, setTotalSales] = useState("");
+  const [adSpendRaw, setAdSpendRaw] = useState("");
+  const [adSalesRaw, setAdSalesRaw] = useState("");
+  const [totalSalesRaw, setTotalSalesRaw] = useState("");
 
-  const [showResult, setShowResult] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [touched, setTouched] = useState({
+    adSpend: false,
+    adSales: false,
+    totalSales: false,
+  });
 
-  const [focusedField, setFocusedField] = useState<
-    "spend" | "adsales" | "totalsales" | null
-  >(null);
+  const [showResults, setShowResults] = useState(false);
 
-  const adSpendNum = useMemo(() => parseMoney(adSpend), [adSpend]);
-  const adSalesNum = useMemo(() => parseMoney(adSales), [adSales]);
-  const totalSalesNum = useMemo(() => parseMoney(totalSales), [totalSales]);
+  const values = useMemo(() => {
+    const adSpend = clampNonNegative(parseMoney(adSpendRaw));
+    const adSales = clampNonNegative(parseMoney(adSalesRaw));
+    const totalSales = clampNonNegative(parseMoney(totalSalesRaw));
 
-  const baseValid =
-    Number.isFinite(adSpendNum) &&
-    Number.isFinite(adSalesNum) &&
-    Number.isFinite(totalSalesNum) &&
-    adSpendNum >= 0 &&
-    adSalesNum > 0 &&
-    totalSalesNum > 0;
+    const isValid =
+      Number.isFinite(adSpend) &&
+      Number.isFinite(adSales) &&
+      Number.isFinite(totalSales) &&
+      adSpendRaw.trim() !== "" &&
+      adSalesRaw.trim() !== "" &&
+      totalSalesRaw.trim() !== "";
 
-  const logicalValid = baseValid && adSalesNum <= totalSalesNum;
+    const logicalOk =
+      isValid && Number.isFinite(adSales) && Number.isFinite(totalSales)
+        ? adSales <= totalSales
+        : true;
 
-  const tacos = logicalValid ? (adSpendNum / totalSalesNum) * 100 : NaN;
-  const acos = logicalValid ? (adSpendNum / adSalesNum) * 100 : NaN;
-  const organicSales = logicalValid ? totalSalesNum - adSalesNum : NaN;
-  const organicPct = logicalValid ? (organicSales / totalSalesNum) * 100 : NaN;
+    const tacos =
+      isValid && totalSales > 0 ? (adSpend / totalSales) * 100 : NaN;
 
-  function validate(): string | null {
-    if (!baseValid) return "Please enter valid numbers in all fields.";
-    if (adSalesNum > totalSalesNum)
-      return "Ad Sales cannot be greater than Total Sales.";
-    return null;
-  }
+    const acos = isValid && adSales > 0 ? (adSpend / adSales) * 100 : NaN;
 
-  function onCalculate() {
-    const v = validate();
-    if (v) {
-      setError(v);
-      setShowResult(false);
-      return;
-    }
-    setError(null);
-    setShowResult(true);
-  }
+    const organicSales =
+      isValid && Number.isFinite(totalSales) && Number.isFinite(adSales)
+        ? totalSales - adSales
+        : NaN;
 
-  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    onCalculate();
+    const organicPct =
+      isValid && totalSales > 0 && Number.isFinite(organicSales)
+        ? (organicSales / totalSales) * 100
+        : NaN;
+
+    return {
+      adSpend,
+      adSales,
+      totalSales,
+      isValid,
+      logicalOk,
+      tacos,
+      acos,
+      organicSales,
+      organicPct,
+    };
+  }, [adSpendRaw, adSalesRaw, totalSalesRaw]);
+
+  const canCalculate = values.isValid && values.logicalOk;
+
+  function onCalculate(e?: React.FormEvent) {
+    e?.preventDefault();
+    setTouched({ adSpend: true, adSales: true, totalSales: true });
+    if (!canCalculate) return;
+    setShowResults(true);
   }
 
   function onClear() {
-    setAdSpend("");
-    setAdSales("");
-    setTotalSales("");
-    setShowResult(false);
-    setError(null);
+    setAdSpendRaw("");
+    setAdSalesRaw("");
+    setTotalSalesRaw("");
+    setTouched({ adSpend: false, adSales: false, totalSales: false });
+    setShowResults(false);
   }
 
-  const canCalculate = logicalValid;
+  const adSalesTooHigh =
+    touched.adSales &&
+    touched.totalSales &&
+    values.isValid &&
+    !values.logicalOk;
+
+  const inputBase =
+    "h-12 w-full rounded-full border border-gray-200 bg-white px-5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-300 focus:ring-2 focus:ring-gray-100";
+
+  const labelBase = "mb-3 block text-sm font-semibold text-gray-800";
 
   return (
     <>
@@ -102,242 +146,178 @@ export default function Home() {
         <title>Amazon TACoS Calculator</title>
         <meta
           name="description"
-          content="Calculate Amazon TACoS, ACoS, and organic sales using Ad Spend, Ad Sales, and Total Sales."
+          content="Calculate your Amazon Total Advertising Cost of Sales (TACoS), ACoS, and organic contribution instantly."
         />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
-      <div className="min-h-screen bg-[#f8fafc]">
-        <div className="mx-auto max-w-5xl px-4 pt-12 pb-16">
-          {/* Breadcrumbs */}
-          <div className="mb-8 flex justify-center text-sm text-gray-500">
-            <span className="hover:text-gray-700 cursor-pointer">Home</span>
-            <span className="mx-2 text-[#F7C948]">→</span>
-            <span className="hover:text-gray-700 cursor-pointer">Tools</span>
-            <span className="mx-2 text-[#F7C948]">→</span>
-            <span className="font-medium text-gray-900">
+      <main className="min-h-screen bg-[#F6F7FB] px-6 pb-24 pt-10 text-gray-900">
+        <div className="mx-auto max-w-5xl">
+          {/* Breadcrumb */}
+          <div className="mb-8 flex justify-center text-xs text-gray-500">
+            <span>Home</span>
+            <span className="mx-2">→</span>
+            <span>Tools</span>
+            <span className="mx-2">→</span>
+            <span className="font-semibold text-gray-700">
               Amazon TACoS Calculator
             </span>
           </div>
 
-          <div className="text-center">
-            <h1 className="text-5xl font-bold tracking-tight text-gray-900">
+          {/* Header */}
+          <header className="mx-auto mb-10 max-w-2xl text-center">
+            <h1 className="text-4xl font-extrabold tracking-tight text-[#111827] sm:text-5xl">
               Amazon TACoS Calculator
             </h1>
+            <p className="mt-4 text-base text-gray-600">
+              Calculate your{" "}
+              <span className="font-semibold text-gray-800">
+                Total Advertising Cost of Sales (TACoS)
+              </span>{" "}
+              instantly.
+              <br />
+              Enter your total ad spend, ad sales, and total sales, then click
+              calculate.
+            </p>
+          </header>
 
-            <div className="mt-4 text-lg text-gray-600 leading-snug">
+          {/* Card */}
+          <div className="mx-auto w-full max-w-3xl rounded-3xl bg-white p-8 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
+            <form onSubmit={onCalculate} className="space-y-5">
+              {/* Total Ad Spend */}
               <div>
-                Calculate your{" "}
-                <span className="font-semibold text-gray-900">
-                  Total Advertising Cost of Sales (TACoS)
-                </span>{" "}
-                instantly.
+                <label className={labelBase} htmlFor="adSpend">
+                  Total Ad Spend ($)
+                </label>
+                <input
+                  id="adSpend"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="e.g. 500"
+                  className={inputBase}
+                  value={adSpendRaw}
+                  onChange={(e) => setAdSpendRaw(sanitizeNumericInput(e.target.value))}
+                  onBlur={() => setTouched((t) => ({ ...t, adSpend: true }))}
+                />
               </div>
-              <div className="mt-1">
-                Enter your total ad spend, ad sales, and total sales, then click
-                calculate.
+
+              {/* Ad Sales */}
+              <div>
+                <label className={labelBase} htmlFor="adSales">
+                  Ad Sales ($)
+                </label>
+                <input
+                  id="adSales"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="e.g. 2000"
+                  className={inputBase}
+                  value={adSalesRaw}
+                  onChange={(e) => setAdSalesRaw(sanitizeNumericInput(e.target.value))}
+                  onBlur={() => setTouched((t) => ({ ...t, adSales: true }))}
+                />
               </div>
-            </div>
-          </div>
 
-          <div className="mt-10 flex justify-center">
-            <div className="w-full max-w-3xl rounded-3xl bg-white p-8 shadow-sm border border-gray-100">
-              <form onSubmit={onSubmit} className="space-y-5">
-                {/* Total Ad Spend */}
-                <div>
-                  <div className="mb-2 font-medium text-gray-900">
-                    Total Ad Spend ($)
-                  </div>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={adSpend}
-                    onFocus={() => setFocusedField("spend")}
-                    onBlur={() => setFocusedField(null)}
-                    onChange={(e) => {
-                      setAdSpend(sanitizeNumericInput(e.target.value));
-                      setShowResult(false);
-                      setError(null);
-                    }}
-                    onPaste={(e) => {
-                      e.preventDefault();
-                      const text = e.clipboardData.getData("text");
-                      setAdSpend(sanitizeNumericInput(text));
-                      setShowResult(false);
-                      setError(null);
-                    }}
-                    placeholder="e.g. 500"
-                    className="w-full h-12 rounded-full border border-gray-200 px-5 outline-none focus:border-gray-300"
-                  />
-                  {focusedField === "spend" && (
-                    <div className="mt-2 text-sm text-gray-500">
-                      Enter your total ad spend (numbers only).
+              {/* Total Sales */}
+              <div>
+                <label className={labelBase} htmlFor="totalSales">
+                  Total Sales ($)
+                </label>
+                <input
+                  id="totalSales"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="e.g. 5000"
+                  className={inputBase}
+                  value={totalSalesRaw}
+                  onChange={(e) =>
+                    setTotalSalesRaw(sanitizeNumericInput(e.target.value))
+                  }
+                  onBlur={() => setTouched((t) => ({ ...t, totalSales: true }))}
+                />
+              </div>
+
+              {adSalesTooHigh && (
+                <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  Ad Sales cannot be greater than Total Sales.
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={!canCalculate}
+                className={[
+                  "h-12 w-full rounded-full font-semibold transition",
+                  canCalculate
+                    ? "bg-[#F2C94C] text-gray-900 hover:bg-[#EABF3F]"
+                    : "cursor-not-allowed bg-gray-100 text-gray-400",
+                ].join(" ")}
+              >
+                Calculate Metrics
+              </button>
+            </form>
+
+            {/* Results */}
+            {showResults && canCalculate && (
+              <div className="mt-8 rounded-2xl bg-[#FAF3E0] p-6">
+                <div className="grid grid-cols-2 gap-6 text-center">
+                  <div>
+                    <div className="text-[11px] font-bold tracking-widest text-gray-500">
+                      YOUR TACOS
                     </div>
-                  )}
+                    <div className="mt-2 text-4xl font-extrabold tracking-tight text-gray-900">
+                      {formatPct2(values.tacos)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold tracking-widest text-gray-500">
+                      YOUR ACOS
+                    </div>
+                    <div className="mt-2 text-4xl font-extrabold tracking-tight text-gray-900">
+                      {formatPct2(values.acos)}
+                    </div>
+                  </div>
                 </div>
 
-                {/* Ad Sales */}
-                <div>
-                  <div className="mb-2 font-medium text-gray-900">
-                    Ad Sales ($)
+                <div className="mt-6 rounded-2xl bg-white px-5 py-4">
+                  <div className="text-[11px] font-bold tracking-widest text-gray-500">
+                    ORGANIC SALES
                   </div>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={adSales}
-                    onFocus={() => setFocusedField("adsales")}
-                    onBlur={() => setFocusedField(null)}
-                    onChange={(e) => {
-                      setAdSales(sanitizeNumericInput(e.target.value));
-                      setShowResult(false);
-                      setError(null);
-                    }}
-                    onPaste={(e) => {
-                      e.preventDefault();
-                      const text = e.clipboardData.getData("text");
-                      setAdSales(sanitizeNumericInput(text));
-                      setShowResult(false);
-                      setError(null);
-                    }}
-                    placeholder="e.g. 2000"
-                    className="w-full h-12 rounded-full border border-gray-200 px-5 outline-none focus:border-gray-300"
-                  />
-                  {focusedField === "adsales" && (
-                    <div className="mt-2 text-sm text-gray-500">
-                      Enter ad-attributed sales (numbers only).
-                    </div>
-                  )}
+                  <div className="mt-1 text-sm font-semibold text-gray-900">
+                    {formatMoney0(values.organicSales)} ({formatPct0(values.organicPct)})
+                  </div>
                 </div>
 
-                {/* Total Sales */}
-                <div>
-                  <div className="mb-2 font-medium text-gray-900">
-                    Total Sales ($)
+                <div className="mt-6 text-center text-xs text-gray-600">
+                  <div>
+                    TACoS = (Total Ad Spend ÷ Total Sales) × 100
                   </div>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={totalSales}
-                    onFocus={() => setFocusedField("totalsales")}
-                    onBlur={() => setFocusedField(null)}
-                    onChange={(e) => {
-                      setTotalSales(sanitizeNumericInput(e.target.value));
-                      setShowResult(false);
-                      setError(null);
-                    }}
-                    onPaste={(e) => {
-                      e.preventDefault();
-                      const text = e.clipboardData.getData("text");
-                      setTotalSales(sanitizeNumericInput(text));
-                      setShowResult(false);
-                      setError(null);
-                    }}
-                    placeholder="e.g. 5000"
-                    className="w-full h-12 rounded-full border border-gray-200 px-5 outline-none focus:border-gray-300"
-                  />
-                  {focusedField === "totalsales" && (
-                    <div className="mt-2 text-sm text-gray-500">
-                      Enter total sales (ad + organic) (numbers only).
-                    </div>
-                  )}
+                  <div>
+                    ACoS = (Total Ad Spend ÷ Ad Sales) × 100
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={onClear}
+                    className="mt-4 text-sm font-semibold text-gray-800 underline underline-offset-4 hover:text-gray-900"
+                  >
+                    Clear
+                  </button>
                 </div>
-
-                <button
-                  type="submit"
-                  disabled={!canCalculate}
-                  className={[
-                    "w-full h-12 rounded-full font-semibold transition",
-                    canCalculate
-                      ? "bg-[#F7C948] text-gray-900 hover:bg-gray-900 hover:text-[#F7C948]"
-                      : "bg-gray-100 text-gray-400 cursor-not-allowed",
-                  ].join(" ")}
-                >
-                  Calculate Metrics
-                </button>
-
-                {/* Error */}
-                {error ? (
-                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    {error}
-                  </div>
-                ) : null}
-
-                {/* Results */}
-                {showResult ? (
-                  <div className="mt-6 rounded-2xl border border-gray-100 bg-[#fbf6e7] p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                      <div className="text-center md:text-left">
-                        <div className="text-xs font-semibold tracking-wider text-gray-600">
-                          YOUR TACOS
-                        </div>
-                        <div className="mt-2 text-5xl font-bold text-gray-900">
-                          {formatPct(tacos)}
-                        </div>
-                      </div>
-
-                      <div className="text-center md:text-left">
-                        <div className="text-xs font-semibold tracking-wider text-gray-600">
-                          YOUR ACOS
-                        </div>
-                        <div className="mt-2 text-5xl font-bold text-gray-900">
-                          {formatPct(acos)}
-                        </div>
-                      </div>
-
-                      <div className="md:col-span-2 rounded-2xl bg-white border border-gray-100 p-5">
-                        <div className="text-xs font-semibold tracking-wider text-gray-600">
-                          ORGANIC SALES
-                        </div>
-                        <div className="mt-2 text-2xl font-bold text-gray-900">
-                          {formatMoney(organicSales)}{" "}
-                          <span className="text-gray-500 font-semibold">
-                            ({formatPct(organicPct)})
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-5 text-center text-sm text-gray-700">
-                      <div className="font-semibold">Formulas</div>
-                      <div className="mt-1">
-                        <span className="font-semibold">TACoS</span> = (Ad Spend
-                        ÷ Total Sales) × 100
-                      </div>
-                      <div>
-                        <span className="font-semibold">ACoS</span> = (Ad Spend
-                        ÷ Ad Sales) × 100
-                      </div>
-                      <div>
-                        <span className="font-semibold">Organic Sales</span> =
-                        Total Sales − Ad Sales
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={onClear}
-                        className="mt-4 text-sm font-semibold text-gray-700 hover:text-gray-900"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </form>
-            </div>
+              </div>
+            )}
           </div>
 
-          <div className="mt-8 text-center text-xs text-gray-400">
-            Tip: Lower TACoS usually indicates stronger organic sales and a
-            healthier business.
-          </div>
+          {/* Tip */}
+          <p className="mx-auto mt-8 max-w-2xl text-center text-xs text-gray-500">
+            Tip: Lower TACoS usually indicates stronger organic sales and a healthier
+            business.
+          </p>
         </div>
-      </div>
+      </main>
     </>
   );
 }
-
