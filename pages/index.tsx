@@ -1,86 +1,75 @@
+// pages/index.tsx
 import Head from "next/head";
 import React, { useMemo, useState } from "react";
 
-const isValidNumber = (value: string) => {
-  if (value.trim() === "") return false;
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0;
-};
+function formatMoney(value: number) {
+  // no decimals, with commas: 11013 -> $11,013
+  return (
+    "$" +
+    Math.round(value).toLocaleString("en-US", {
+      maximumFractionDigits: 0,
+    })
+  );
+}
 
-const formatMoney = (value: number) => {
-  // show no decimals unless needed
-  const isInt = Math.abs(value - Math.round(value)) < 1e-9;
-  const formatted = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: isInt ? 0 : 2,
-    maximumFractionDigits: isInt ? 0 : 2,
-  }).format(value);
-
-  // Intl returns e.g. "$500" already; keep as-is
-  return formatted;
-};
-
-const formatPercent = (value: number) => {
-  const rounded2 = Math.round(value * 100) / 100;
-  const isInt = Math.abs(rounded2 - Math.round(rounded2)) < 1e-9;
-  return `${isInt ? Math.round(rounded2) : rounded2.toFixed(2)}%`;
-};
+function formatPercent(value: number) {
+  // show 0 decimals if whole, otherwise 2 decimals (e.g. 50% or 66.67%)
+  const isWhole = Math.abs(value - Math.round(value)) < 1e-9;
+  return isWhole ? `${Math.round(value)}%` : `${value.toFixed(2)}%`;
+}
 
 export default function Home() {
-  const [adSpend, setAdSpend] = useState("");
-  const [adSales, setAdSales] = useState("");
-  const [totalSales, setTotalSales] = useState("");
+  const [adSpend, setAdSpend] = useState<string>("");
+  const [adSales, setAdSales] = useState<string>("");
+  const [totalSales, setTotalSales] = useState<string>("");
 
   const [tacos, setTacos] = useState<number | null>(null);
   const [acos, setAcos] = useState<number | null>(null);
   const [organicSales, setOrganicSales] = useState<number | null>(null);
   const [organicPercent, setOrganicPercent] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  const calculate = () => {
-    setError(null);
+  const isReady = useMemo(() => {
+    const a = parseFloat(adSpend);
+    const s = parseFloat(adSales);
+    const t = parseFloat(totalSales);
+    if ([a, s, t].some((v) => Number.isNaN(v))) return false;
+    if (t <= 0 || s <= 0 || a < 0) return false;
+    if (s > t) return false;
+    return true;
+  }, [adSpend, adSales, totalSales]);
 
-    if (!isValidNumber(adSpend) || !isValidNumber(adSales) || !isValidNumber(totalSales)) {
-      setError("Please enter valid non-negative numbers in all fields.");
+  function calculate() {
+    const a = parseFloat(adSpend);
+    const s = parseFloat(adSales);
+    const t = parseFloat(totalSales);
+
+    if ([a, s, t].some((v) => Number.isNaN(v))) return;
+
+    if (s > t) {
+      alert("Ad Sales cannot be greater than Total Sales.");
+      return;
+    }
+    if (t <= 0 || s <= 0) {
+      alert("Ad Sales and Total Sales must be greater than 0.");
+      return;
+    }
+    if (a < 0) {
+      alert("Ad Spend cannot be negative.");
       return;
     }
 
-    const adSpendNum = Number(adSpend);
-    const adSalesNum = Number(adSales);
-    const totalSalesNum = Number(totalSales);
-
-    if (totalSalesNum === 0) {
-      setError("Total Sales must be greater than 0.");
-      return;
-    }
-
-    if (adSalesNum === 0) {
-      setError("Ad Sales must be greater than 0.");
-      return;
-    }
-
-    if (adSalesNum > totalSalesNum) {
-      setError("Ad Sales can't be greater than Total Sales.");
-      return;
-    }
-
-    const spend = adSpendNum;
-    const adsales = adSalesNum;
-    const totalsales = totalSalesNum;
-
-    const tacosValue = (spend / totalsales) * 100;
-    const acosValue = (spend / adsales) * 100;
-    const organic = totalsales - adsales;
-    const organicPct = (organic / totalsales) * 100;
+    const tacosValue = (a / t) * 100;
+    const acosValue = (a / s) * 100;
+    const organicValue = t - s;
+    const organicPctValue = (organicValue / t) * 100;
 
     setTacos(tacosValue);
     setAcos(acosValue);
-    setOrganicSales(organic);
-    setOrganicPercent(organicPct);
-  };
+    setOrganicSales(organicValue);
+    setOrganicPercent(organicPctValue);
+  }
 
-  const clear = () => {
+  function clearAll() {
     setAdSpend("");
     setAdSales("");
     setTotalSales("");
@@ -88,165 +77,173 @@ export default function Home() {
     setAcos(null);
     setOrganicSales(null);
     setOrganicPercent(null);
-    setError(null);
-  };
-
-  const onNumberChange =
-    (setter: (v: string) => void) =>
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const v = e.target.value;
-      // allow empty, digits, and a single dot
-      if (v === "" || /^\d*\.?\d*$/.test(v)) setter(v);
-    };
-
-  const tacosLabel = useMemo(() => (tacos == null ? "--" : formatPercent(tacos)), [tacos]);
-  const acosLabel = useMemo(() => (acos == null ? "--" : formatPercent(acos)), [acos]);
-
-  const organicSalesLabel = useMemo(() => {
-    if (organicSales == null || organicPercent == null) return "--";
-    return `${formatMoney(organicSales)} (${formatPercent(organicPercent)})`;
-  }, [organicSales, organicPercent]);
+  }
 
   return (
     <>
       <Head>
         <title>Amazon TACoS Calculator</title>
-        <meta name="description" content="Calculate your Total Advertising Cost of Sales (TACoS) instantly." />
+        <meta
+          name="description"
+          content="Calculate your Total Advertising Cost of Sales (TACoS) instantly."
+        />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
-      <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-900">
-        <div className="mx-auto max-w-[720px] text-center">
-          <div className="mb-6 text-xs text-slate-500">
-            Home <span className="mx-1">→</span> Tools <span className="mx-1">→</span>{" "}
-            <span className="font-medium text-slate-700">Amazon TACoS Calculator</span>
-          </div>
+      <main className="min-h-screen bg-[#F5F7FB] px-4 pb-16">
+        {/* Breadcrumbs */}
+        <div className="mx-auto w-full max-w-[520px] pt-8 text-center text-sm text-slate-500">
+          Home &nbsp;→&nbsp; Tools &nbsp;→&nbsp;{" "}
+          <span className="font-semibold text-slate-700">
+            Amazon TACoS Calculator
+          </span>
+        </div>
 
-          <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">
+        {/* Title */}
+        <div className="mx-auto w-full max-w-[520px] pt-6 text-center">
+          <h1 className="text-[40px] font-extrabold leading-tight tracking-tight text-slate-900 sm:text-5xl">
             Amazon TACoS Calculator
           </h1>
 
-          {/* ✅ Keep as ONE combined paragraph (mobile wraps naturally, but stays “together”) */}
-          <p className="mt-4 text-base text-slate-600">
+          {/* single paragraph (mobile-friendly) */}
+          <p className="mx-auto mt-4 max-w-[520px] text-lg leading-relaxed text-slate-600">
             Calculate your{" "}
-            <span className="font-semibold text-slate-800">
+            <span className="font-semibold text-slate-700">
               Total Advertising Cost of Sales (TACoS)
             </span>{" "}
-            instantly. Enter your total ad spend, ad sales, and total sales, then click calculate.
-          </p>
-
-          <div className="mx-auto mt-10 max-w-3xl rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-8">
-            <div className="space-y-6 text-left">
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-800">
-                  Total Ad Spend ($)
-                </label>
-                <input
-                  inputMode="decimal"
-                  placeholder="e.g. 500"
-                  className="h-12 w-full rounded-full border border-slate-200 px-5 text-sm outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-100"
-                  value={adSpend}
-                  onChange={onNumberChange(setAdSpend)}
-                  onKeyDown={(e) => e.key === "Enter" && calculate()}
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-800">Ad Sales ($)</label>
-                <input
-                  inputMode="decimal"
-                  placeholder="e.g. 2000"
-                  className="h-12 w-full rounded-full border border-slate-200 px-5 text-sm outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-100"
-                  value={adSales}
-                  onChange={onNumberChange(setAdSales)}
-                  onKeyDown={(e) => e.key === "Enter" && calculate()}
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-800">
-                  Total Sales ($)
-                </label>
-                <input
-                  inputMode="decimal"
-                  placeholder="e.g. 2500"
-                  className="h-12 w-full rounded-full border border-slate-200 px-5 text-sm outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-100"
-                  value={totalSales}
-                  onChange={onNumberChange(setTotalSales)}
-                  onKeyDown={(e) => e.key === "Enter" && calculate()}
-                />
-              </div>
-
-              {error && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {error}
-                </div>
-              )}
-
-              {/* Button size matches ACoS tool */}
-              <button
-                onClick={calculate}
-                className="h-12 w-full rounded-full bg-[#F2C94C] font-semibold text-slate-900 transition hover:brightness-95 active:brightness-90 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={!adSpend || !adSales || !totalSales}
-              >
-                Calculate Metrics
-              </button>
-
-              {(tacos != null || acos != null) && (
-                <div
-                  className="mt-2 rounded-2xl px-6 py-6"
-                  style={{ backgroundColor: "#D0E0C9" }}
-                >
-                  <div className="grid grid-cols-2 gap-6 text-center">
-                    <div>
-                      <div className="text-[11px] font-semibold tracking-widest text-slate-600">
-                        YOUR TACOS
-                      </div>
-                      <div className="mt-2 text-4xl font-extrabold text-slate-900">
-                        {tacosLabel}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-[11px] font-semibold tracking-widest text-slate-600">
-                        YOUR ACOS
-                      </div>
-                      <div className="mt-2 text-4xl font-extrabold text-slate-900">
-                        {acosLabel}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* ✅ Center ORGANIC SALES label + value in the middle */}
-                  <div className="mt-6 flex flex-col items-center justify-center rounded-2xl bg-white px-5 py-4 text-center">
-                    <div className="text-[11px] font-semibold tracking-widest text-slate-500">
-                      ORGANIC SALES
-                    </div>
-
-                    <div className="mt-2 text-sm font-semibold text-slate-900">
-                      {organicSalesLabel}
-                    </div>
-                  </div>
-
-                  <div className="mt-6 text-center text-xs text-slate-700">
-                    <div>TACoS = (Total Ad Spend ÷ Total Sales) × 100</div>
-                    <div>ACoS = (Total Ad Spend ÷ Ad Sales) × 100</div>
-                  </div>
-
-                  <button
-                    onClick={clear}
-                    className="mx-auto mt-4 block text-sm font-semibold text-slate-800 underline underline-offset-4 hover:text-slate-900"
-                  >
-                    Clear
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <p className="mx-auto mt-8 max-w-xl text-sm text-slate-500">
-            Tip: Lower TACoS usually indicates stronger organic sales and a healthier business.
+            instantly. Enter your total ad spend, ad sales, and total sales, then
+            click calculate.
           </p>
         </div>
+
+        {/* Card */}
+        <section className="mx-auto mt-10 w-full max-w-[520px] rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          {/* Inputs */}
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-semibold text-slate-800">
+                Total Ad Spend ($)
+              </label>
+              <input
+                className="mt-2 w-full rounded-full border border-slate-200 bg-white px-6 py-4 text-slate-900 shadow-sm outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-100"
+                placeholder="e.g. 500"
+                inputMode="decimal"
+                value={adSpend}
+                onChange={(e) => setAdSpend(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") calculate();
+                }}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-800">
+                Ad Sales ($)
+              </label>
+              <input
+                className="mt-2 w-full rounded-full border border-slate-200 bg-white px-6 py-4 text-slate-900 shadow-sm outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-100"
+                placeholder="e.g. 2000"
+                inputMode="decimal"
+                value={adSales}
+                onChange={(e) => setAdSales(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") calculate();
+                }}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-800">
+                Total Sales ($)
+              </label>
+              <input
+                className="mt-2 w-full rounded-full border border-slate-200 bg-white px-6 py-4 text-slate-900 shadow-sm outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-100"
+                placeholder="e.g. 2500"
+                inputMode="decimal"
+                value={totalSales}
+                onChange={(e) => setTotalSales(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") calculate();
+                }}
+              />
+            </div>
+
+            <button
+              className={[
+                "mt-2 w-full rounded-full py-4 text-center text-sm font-semibold shadow-sm transition",
+                isReady
+                  ? "bg-[#F4C84D] text-slate-900 hover:brightness-95"
+                  : "cursor-not-allowed bg-slate-100 text-slate-400",
+              ].join(" ")}
+              onClick={calculate}
+              disabled={!isReady}
+            >
+              Calculate Metrics
+            </button>
+          </div>
+
+          {/* Results */}
+          {tacos !== null && acos !== null && organicSales !== null && (
+            <div className="mt-6 rounded-3xl bg-[#D0E0C9] p-6 sm:p-8">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="text-center">
+                  <div className="text-[11px] font-semibold tracking-widest text-slate-600">
+                    YOUR TACOS
+                  </div>
+                  <div className="mt-2 text-4xl font-extrabold tracking-tight text-slate-900">
+                    {formatPercent(tacos)}
+                  </div>
+                </div>
+
+                <div className="text-center">
+                  <div className="text-[11px] font-semibold tracking-widest text-slate-600">
+                    YOUR ACOS
+                  </div>
+                  <div className="mt-2 text-4xl font-extrabold tracking-tight text-slate-900">
+                    {formatPercent(acos)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Centered Organic Sales */}
+              <div className="mt-6 rounded-2xl bg-white px-5 py-5 text-center flex flex-col items-center justify-center">
+                <div className="text-[11px] font-semibold tracking-widest text-slate-500">
+                  ORGANIC SALES
+                </div>
+
+                {/* removes .00 like: $500 (20%) */}
+                <div className="mt-2 text-sm font-semibold text-slate-900">
+                  {organicSales === null || organicPercent === null
+                    ? "—"
+                    : `${formatMoney(organicSales)} (${formatPercent(
+                        organicPercent
+                      )} of total sales)`}
+                </div>
+              </div>
+
+              <div className="mt-6 text-center text-xs text-slate-600">
+                <div>
+                  TACoS = ( Total Ad Spend ÷ Total Sales ) × 100
+                </div>
+                <div>
+                  ACoS = ( Total Ad Spend ÷ Ad Sales ) × 100
+                </div>
+              </div>
+
+              <button
+                className="mx-auto mt-4 block text-sm font-semibold text-slate-800 underline underline-offset-4"
+                onClick={clearAll}
+              >
+                Clear
+              </button>
+            </div>
+          )}
+        </section>
+
+        <p className="mx-auto mt-8 w-full max-w-[520px] text-center text-sm text-slate-500">
+          Tip: Lower TACoS usually indicates stronger organic sales and a
+          healthier business.
+        </p>
       </main>
     </>
   );
