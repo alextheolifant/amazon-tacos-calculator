@@ -1,5 +1,3 @@
-npm install
-npm run dev
 import Head from "next/head";
 import React, { useMemo, useState } from "react";
 
