@@ -1,111 +1,108 @@
 import Head from "next/head";
 import React, { useMemo, useState } from "react";
 
-function sanitizeNumberInput(value: string) {
-  // allow digits + one dot, strip everything else
-  const cleaned = value.replace(/,/g, "").replace(/[^\d.]/g, "");
-  const parts = cleaned.split(".");
-  if (parts.length <= 2) return cleaned;
-  return `${parts[0]}.${parts.slice(1).join("")}`; // keep only first dot
+function isNumericLike(value: string) {
+  // allow digits + single dot
+  return /^[0-9]*\.?[0-9]*$/.test(value);
 }
 
-function toNumber(value: string) {
-  const n = parseFloat(value);
-  return Number.isFinite(n) ? n : NaN;
+function formatMoneyNoDecimals(value: number) {
+  // always show no decimals: 500 -> $500, 1500.9 -> $1,501
+  const rounded = Math.round(value);
+  return `$${rounded.toLocaleString("en-US")}`;
+}
+
+function formatPercentNoDecimals(value: number) {
+  // always show no decimals: 20.00 -> 20%
+  return `${Math.round(value)}%`;
 }
 
 export default function Home() {
-  const [adSpend, setAdSpend] = useState("");
-  const [adSales, setAdSales] = useState("");
-  const [totalSales, setTotalSales] = useState("");
+  const [adSpend, setAdSpend] = useState<string>("");
+  const [adSales, setAdSales] = useState<string>("");
+  const [totalSales, setTotalSales] = useState<string>("");
 
-  const [submitted, setSubmitted] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [tacosValue, setTacosValue] = useState<string>("");
+  const [acosValue, setAcosValue] = useState<string>("");
+  const [organicSalesText, setOrganicSalesText] = useState<string>("");
 
-  const values = useMemo(() => {
-    const spend = toNumber(adSpend);
-    const ads = toNumber(adSales);
-    const total = toNumber(totalSales);
+  const [showResults, setShowResults] = useState(false);
+  const [error, setError] = useState<string>("");
 
-    if (!Number.isFinite(spend) || !Number.isFinite(ads) || !Number.isFinite(total)) {
-      return null;
-    }
-
-    // guardrails
-    if (total <= 0 || ads <= 0 || spend < 0) return null;
-    if (ads > total) return null;
-
-    const tacos = (spend / total) * 100;
-    const acos = (spend / ads) * 100;
-    const organicSales = total - ads;
-    const organicPercent = (organicSales / total) * 100;
-
-    return { spend, ads, total, tacos, acos, organicSales, organicPercent };
+  const canCalculate = useMemo(() => {
+    const a = parseFloat(adSpend);
+    const b = parseFloat(adSales);
+    const c = parseFloat(totalSales);
+    return (
+      !Number.isNaN(a) &&
+      !Number.isNaN(b) &&
+      !Number.isNaN(c) &&
+      a > 0 &&
+      b > 0 &&
+      c > 0
+    );
   }, [adSpend, adSales, totalSales]);
 
-  const fmtMoney0 = (n: number) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    }).format(n);
+  function calculateMetrics() {
+    setError("");
 
-  const fmtPct0 = (n: number) =>
-    `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(n)}%`;
+    const spend = parseFloat(adSpend);
+    const adRev = parseFloat(adSales);
+    const totalRev = parseFloat(totalSales);
 
-  const fmtPct2 = (n: number) =>
-    `${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)}%`;
-
-  function validateAll() {
-    setError(null);
-
-    const spend = toNumber(adSpend);
-    const ads = toNumber(adSales);
-    const total = toNumber(totalSales);
-
-    if (!Number.isFinite(spend) || !Number.isFinite(ads) || !Number.isFinite(total)) {
+    if ([spend, adRev, totalRev].some((v) => Number.isNaN(v))) {
       setError("Please enter numbers in all fields.");
-      return false;
+      setShowResults(false);
+      return;
     }
-    if (total <= 0) {
-      setError("Total Sales must be greater than 0.");
-      return false;
+
+    if (spend <= 0 || adRev <= 0 || totalRev <= 0) {
+      setError("Values must be greater than 0.");
+      setShowResults(false);
+      return;
     }
-    if (ads <= 0) {
-      setError("Ad Sales must be greater than 0.");
-      return false;
-    }
-    if (spend < 0) {
-      setError("Total Ad Spend cannot be negative.");
-      return false;
-    }
-    if (ads > total) {
+
+    if (adRev > totalRev) {
       setError("Ad Sales cannot be greater than Total Sales.");
-      return false;
+      setShowResults(false);
+      return;
     }
 
-    return true;
+    const tacos = (spend / totalRev) * 100;
+    const acos = (spend / adRev) * 100;
+    const organicSales = totalRev - adRev;
+    const organicPercent = totalRev === 0 ? 0 : (organicSales / totalRev) * 100;
+
+    setTacosValue(`${tacos.toFixed(2)}%`);
+    setAcosValue(`${acos.toFixed(2)}%`);
+
+    // requested format: $500 (20%)
+    setOrganicSalesText(
+      `${formatMoneyNoDecimals(organicSales)} (${formatPercentNoDecimals(
+        organicPercent
+      )})`
+    );
+
+    setShowResults(true);
   }
 
-  function onCalculate() {
-    setSubmitted(true);
-    if (!validateAll()) return;
-  }
-
-  function onClear() {
+  function clearForm() {
     setAdSpend("");
     setAdSales("");
     setTotalSales("");
-    setSubmitted(false);
-    setError(null);
+    setTacosValue("");
+    setAcosValue("");
+    setOrganicSalesText("");
+    setError("");
+    setShowResults(false);
   }
 
-  const showResults = submitted && !error && values;
-
-  const inputBase =
-    "w-full rounded-full border border-slate-200 bg-white px-5 py-3 text-base outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100";
-  const labelBase = "block text-sm font-semibold text-slate-800 mb-2";
-  const helperBase = "mt-1 text-xs text-slate-500";
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && canCalculate) {
+      e.preventDefault();
+      calculateMetrics();
+    }
+  }
 
   return (
     <>
@@ -113,147 +110,176 @@ export default function Home() {
         <title>Amazon TACoS Calculator</title>
         <meta
           name="description"
-          content="Calculate Amazon TACoS (Total Advertising Cost of Sales) instantly. Enter total ad spend, ad sales, and total sales to get TACoS, ACoS, and organic sales."
+          content="Calculate your Total Advertising Cost of Sales (TACoS) instantly."
         />
       </Head>
 
-      <main className="min-h-screen bg-slate-50">
-        <div className="mx-auto max-w-5xl px-4 pt-10 pb-16">
-          {/* Breadcrumb */}
-          <div className="mb-6 text-center text-xs text-slate-500">
-            Home <span className="mx-2">→</span> Tools <span className="mx-2">→</span>{" "}
-            <span className="font-semibold text-slate-700">Amazon TACoS Calculator</span>
-          </div>
+      <main className="min-h-screen bg-[#f6f8fb] px-4 py-12">
+        {/* Breadcrumb */}
+        <div className="mx-auto flex max-w-2xl justify-center">
+          <p className="text-xs text-slate-500">
+            Home <span className="mx-2">→</span> Tools{" "}
+            <span className="mx-2">→</span>{" "}
+            <span className="font-semibold text-slate-700">
+              Amazon TACoS Calculator
+            </span>
+          </p>
+        </div>
 
-          {/* Title */}
-          <h1 className="text-center text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
+        {/* Heading */}
+        <div className="mx-auto mt-6 max-w-2xl text-center">
+          <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 md:text-5xl">
             Amazon TACoS Calculator
           </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-center text-slate-600">
-            Calculate your <span className="font-semibold text-slate-800">Total Advertising Cost of Sales (TACoS)</span>{" "}
+          <p className="mt-4 text-base text-slate-600">
+            Calculate your <span className="font-semibold">Total Advertising Cost of Sales (TACoS)</span>{" "}
             instantly.
             <br />
-            Enter your total ad spend, ad sales, and total sales, then click calculate.
+            Enter your total ad spend, ad sales, and total sales, then click
+            calculate.
           </p>
+        </div>
 
-          {/* Card (match ACoS width vibe) */}
-          <div className="mx-auto mt-10 w-full max-w-2xl rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-8">
+        {/* Card */}
+        <div className="mx-auto mt-10 max-w-2xl">
+          <div className="rounded-2xl bg-white p-6 shadow-[0_10px_30px_rgba(15,23,42,0.06)] ring-1 ring-black/5 md:p-8">
             {/* Inputs */}
-            <div className="space-y-5">
+            <div className="space-y-6">
               <div>
-                <label className={labelBase} htmlFor="adSpend">
+                <label className="block text-sm font-semibold text-slate-900">
                   Total Ad Spend ($)
                 </label>
-                <input
-                  id="adSpend"
-                  className={inputBase}
-                  placeholder="e.g. 500"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  value={adSpend}
-                  onChange={(e) => setAdSpend(sanitizeNumberInput(e.target.value))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") onCalculate();
-                  }}
-                />
-                <div className={helperBase}>Numbers only.</div>
+                <div className="mt-2">
+                  <input
+                    value={adSpend}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!isNumericLike(v)) return;
+                      setAdSpend(v);
+                    }}
+                    onKeyDown={handleKeyDown}
+                    inputMode="decimal"
+                    placeholder="e.g. 500"
+                    className="w-full rounded-full border border-slate-200 bg-white px-5 py-3 text-slate-900 shadow-sm outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-100"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className={labelBase} htmlFor="adSales">
+                <label className="block text-sm font-semibold text-slate-900">
                   Ad Sales ($)
                 </label>
-                <input
-                  id="adSales"
-                  className={inputBase}
-                  placeholder="e.g. 2000"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  value={adSales}
-                  onChange={(e) => setAdSales(sanitizeNumberInput(e.target.value))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") onCalculate();
-                  }}
-                />
-                <div className={helperBase}>Sales attributed to ads.</div>
+                <div className="mt-2">
+                  <input
+                    value={adSales}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!isNumericLike(v)) return;
+                      setAdSales(v);
+                    }}
+                    onKeyDown={handleKeyDown}
+                    inputMode="decimal"
+                    placeholder="e.g. 2000"
+                    className="w-full rounded-full border border-slate-200 bg-white px-5 py-3 text-slate-900 shadow-sm outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-100"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className={labelBase} htmlFor="totalSales">
+                <label className="block text-sm font-semibold text-slate-900">
                   Total Sales ($)
                 </label>
-                <input
-                  id="totalSales"
-                  className={inputBase}
-                  placeholder="e.g. 2500"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  value={totalSales}
-                  onChange={(e) => setTotalSales(sanitizeNumberInput(e.target.value))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") onCalculate();
-                  }}
-                />
-                <div className={helperBase}>Ad sales + organic sales.</div>
+                <div className="mt-2">
+                  <input
+                    value={totalSales}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!isNumericLike(v)) return;
+                      setTotalSales(v);
+                    }}
+                    onKeyDown={handleKeyDown}
+                    inputMode="decimal"
+                    placeholder="e.g. 2500"
+                    className="w-full rounded-full border border-slate-200 bg-white px-5 py-3 text-slate-900 shadow-sm outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-100"
+                  />
+                </div>
               </div>
             </div>
 
+            {/* Error */}
+            {error ? (
+              <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {error}
+              </div>
+            ) : null}
+
             {/* Button */}
             <button
-              type="button"
-              onClick={onCalculate}
-              className="mt-6 w-full rounded-full bg-[#f3c74b] px-6 py-4 font-semibold text-slate-900 shadow-sm transition hover:brightness-95 active:brightness-90"
+              onClick={calculateMetrics}
+              disabled={!canCalculate}
+              className={`mt-7 w-full rounded-full px-6 py-4 text-sm font-semibold transition
+                ${
+                  canCalculate
+                    ? "bg-[#f4c542] text-slate-900 hover:brightness-95"
+                    : "bg-slate-100 text-slate-400"
+                }`}
             >
               Calculate Metrics
             </button>
 
-            {/* Error */}
-            {submitted && error && (
-              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
-
             {/* Results */}
-            {showResults && (
-              <div className="mt-6 rounded-2xl bg-[#f6edd9] p-6">
+            {showResults ? (
+              <div className="mt-7 rounded-2xl bg-[#f7f0df] p-6 md:p-7">
                 <div className="grid grid-cols-2 gap-6 text-center">
                   <div>
-                    <div className="text-[10px] font-bold tracking-widest text-slate-500">YOUR TACOS</div>
-                    <div className="mt-2 text-4xl font-extrabold text-slate-900">{fmtPct2(values.tacos)}</div>
+                    <p className="text-xs font-semibold tracking-widest text-slate-500">
+                      YOUR TACOS
+                    </p>
+                    <p className="mt-2 text-4xl font-extrabold text-slate-900">
+                      {tacosValue}
+                    </p>
                   </div>
                   <div>
-                    <div className="text-[10px] font-bold tracking-widest text-slate-500">YOUR ACOS</div>
-                    <div className="mt-2 text-4xl font-extrabold text-slate-900">{fmtPct2(values.acos)}</div>
+                    <p className="text-xs font-semibold tracking-widest text-slate-500">
+                      YOUR ACOS
+                    </p>
+                    <p className="mt-2 text-4xl font-extrabold text-slate-900">
+                      {acosValue}
+                    </p>
                   </div>
                 </div>
 
-                {/* Organic box with better spacing like ACoS */}
-                <div className="mt-6 rounded-2xl bg-white px-5 py-4 shadow-sm">
-                  <div className="text-[10px] font-bold tracking-widest text-slate-500 mb-2">ORGANIC SALES</div>
-                  <div className="text-base font-semibold text-slate-900">
-                    {fmtMoney0(values.organicSales)} ({fmtPct0(values.organicPercent)})
-                  </div>
+                <div className="mt-6 rounded-xl bg-white px-5 py-4 text-left shadow-sm ring-1 ring-black/5">
+                  <p className="text-xs font-semibold tracking-widest text-slate-500">
+                    ORGANIC SALES
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-slate-900">
+                    {organicSalesText}
+                  </p>
                 </div>
 
-                <div className="mt-5 text-center text-xs text-slate-600">
-                  <div>TACoS = (Total Ad Spend ÷ Total Sales) × 100</div>
-                  <div>ACoS = (Total Ad Spend ÷ Ad Sales) × 100</div>
-                </div>
+                <div className="mt-6 text-center text-xs text-slate-600">
+                  <p>
+                    TACoS = (Total Ad Spend ÷ Total Sales) × 100
+                    <br />
+                    ACoS = (Total Ad Spend ÷ Ad Sales) × 100
+                  </p>
 
-                <button
-                  type="button"
-                  onClick={onClear}
-                  className="mx-auto mt-4 block text-sm font-semibold text-slate-700 underline underline-offset-4 hover:text-slate-900"
-                >
-                  Clear
-                </button>
+                  <button
+                    onClick={clearForm}
+                    className="mt-4 text-xs font-semibold text-slate-700 underline underline-offset-4 hover:text-slate-900"
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
-            )}
+            ) : null}
           </div>
 
+          {/* Tip */}
           <p className="mt-6 text-center text-xs text-slate-500">
-            Tip: Lower TACoS usually indicates stronger organic sales and a healthier business.
+            Tip: Lower TACoS usually indicates stronger organic sales and a
+            healthier business.
           </p>
         </div>
       </main>
