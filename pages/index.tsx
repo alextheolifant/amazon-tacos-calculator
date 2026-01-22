@@ -71,6 +71,11 @@ export default function Home() {
     setShowResults(true);
   }
 
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); // prevents page refresh
+    handleCalculate();  // same action as clicking the button
+  }
+
   function handleClear() {
     setAdSpend("");
     setAdSales("");
@@ -89,7 +94,6 @@ export default function Home() {
       </Head>
 
       <main className="min-h-screen bg-slate-50 px-4 pb-16 pt-12 text-slate-900">
-        {/* Match overall page width with the ACoS tool */}
         <div className="mx-auto max-w-5xl text-center">
           <div className="text-sm text-slate-500">
             Home <span className="mx-2">→</span> Tools{" "}
@@ -102,14 +106,18 @@ export default function Home() {
           </h1>
 
           <p className="mx-auto mt-4 max-w-2xl text-lg leading-7 text-slate-600">
-            Calculate your <span className="font-semibold text-slate-800">Total Advertising Cost of Sales (TACoS)</span>{" "}
-            instantly. Enter your total ad spend, ad sales, and total sales, then click calculate.
+            Calculate your{" "}
+            <span className="font-semibold text-slate-800">
+              Total Advertising Cost of Sales (TACoS)
+            </span>{" "}
+            instantly. Enter your total ad spend, ad sales, and total sales, then click
+            calculate.
           </p>
 
           <div className="mt-10 flex justify-center">
-            {/* This is the key width match: same max-w-3xl as ACoS */}
             <div className="w-full max-w-3xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm md:p-8 text-left">
-              <div className="space-y-6">
+              {/* ✅ Enter will now submit this form */}
+              <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-800">
                     Total Ad Spend ($)
@@ -150,7 +158,7 @@ export default function Home() {
                 </div>
 
                 <button
-                  onClick={handleCalculate}
+                  type="submit"
                   disabled={!canCalculate}
                   className={[
                     "mt-2 w-full rounded-full py-4 text-sm font-semibold transition",
@@ -205,6 +213,7 @@ export default function Home() {
                     </div>
 
                     <button
+                      type="button"
                       onClick={handleClear}
                       className="mx-auto mt-4 block text-sm font-semibold text-slate-700 underline decoration-slate-400 underline-offset-4 hover:text-slate-900"
                     >
@@ -212,11 +221,10 @@ export default function Home() {
                     </button>
                   </div>
                 )}
-              </div>
+              </form>
             </div>
           </div>
 
-          {/* Bring the tip closer to the card (still outside) */}
           <p className="mt-5 text-center text-xs text-slate-500">
             Tip: Lower TACoS usually indicates stronger organic sales and a healthier business.
           </p>
