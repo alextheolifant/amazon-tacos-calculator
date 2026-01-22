@@ -2,20 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --bg: #f6f7fb;
-  --text: #0f172a;
-}
-
+/* Base app look (matches your ACOS tool vibe) */
 html,
 body {
   height: 100%;
 }
 
 body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
-    Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  @apply bg-slate-50 text-slate-900 antialiased;
 }
